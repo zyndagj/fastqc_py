@@ -167,8 +167,11 @@ class fqFile:
 				print "CPU time: %.3f seconds" % (cpuTotal)
 				print "Walltime: %.3f seconds" % (wallTime)
 		sums = np.sum(bases,axis=1)
+		tmp = bases/(np.matrix(sums).T)
 		plt.figure(figsize=(12,4))
-		plt.plot(bases/np.matrix(sums).T)
+		for i in range(tmp.shape[1]):
+			plt.plot(tmp[:,i])
+		#plt.plot(bases/np.matrix(sums).T)
 		plt.legend(['A','G','C','T'],loc=5,bbox_to_anchor=(1.1,0.5))
 		plt.title("%s Base Bias" % (self.inFile.split('/')[-1]))
 		plt.ylabel("% of Bases")
@@ -229,7 +232,7 @@ class fqFile:
 				plt.bar(np.zeros(20), vals, width=np.ones(20), color=cm.Set1(np.linspace(0,1,20)), bottom=bottoms)
 				plt.xlim((-0.05,1.6))
 				for i in xrange(20):
-					plt.text(1.1, bottoms[i]+vals[i]/2.0, top20[i][0], verticalalignment='center', family='Consolas')
+					plt.text(1.1, bottoms[i]+vals[i]/2.0, top20[i][0], verticalalignment='center', family='monospace')
 					plt.text(0.5, bottoms[i]+vals[i]/2.0, str(vals[i]), va='center',ha='center')
 				fName = self.inFile.split('/')[-1]
 				plt.title("Top 20 K-mers in "+fName)
