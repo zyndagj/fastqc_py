@@ -167,11 +167,9 @@ class fqFile:
 				print "CPU time: %.3f seconds" % (cpuTotal)
 				print "Walltime: %.3f seconds" % (wallTime)
 		sums = np.sum(bases,axis=1)
-		tmp = bases/(np.matrix(sums).T)
 		plt.figure(figsize=(12,4))
-		for i in range(tmp.shape[1]):
-			plt.plot(tmp[:,i])
-		#plt.plot(bases/np.matrix(sums).T)
+		for i in range(4):
+			plt.plot(bases[:,i]/sums)
 		plt.legend(['A','G','C','T'],loc=5,bbox_to_anchor=(1.1,0.5))
 		plt.title("%s Base Bias" % (self.inFile.split('/')[-1]))
 		plt.ylabel("% of Bases")
