@@ -8,6 +8,9 @@ from collections import Counter
 import matplotlib.cm as cm
 from Bio import pairwise2, SeqIO, Seq
 
+baseDict = {'A':'0','G':'1','C':'2','T':'3'}
+bases = ('A','G','C','T')
+
 class fqFile:
 	def __init__(self, inFile):
 		"""
@@ -79,7 +82,6 @@ class fqFile:
 					quals[i].append(tmp[i])
 			cpuTotal = time.clock() - cpuStart
 			wallTime = time.time() - wallStart
-			print sum(map(sum, quals))
 		else:
 			nCores = setCores(nCores, verbose)
 			p = [] # process array
@@ -132,13 +134,12 @@ class fqFile:
 			self.readLength(printOut=False)
 		bases = np.zeros((self.maxLen, 4))
 		if nCores == 1:
-			nt = ('A','G','C','T')
 			count = 0
 			start = time.clock()
 			for seq,qual in fileGen(self.inFile):
 				npSeq = np.core.defchararray.asarray(seq, itemsize=1)
 				for i in xrange(4):
-					bases[npSeq==nt[i],i] += 1
+					bases[npSeq==bases[i],i] += 1
 				count += 1
 				if not count % 100000: print "Finished %d of %d reads" % (count, self.numReads)
 			if verbose:
@@ -170,7 +171,7 @@ class fqFile:
 		plt.figure(figsize=(12,4))
 		for i in range(4):
 			plt.plot(bases[:,i]/sums)
-		plt.legend(['A','G','C','T'],loc=5,bbox_to_anchor=(1.1,0.5))
+		plt.legend(bases,loc=5,bbox_to_anchor=(1.1,0.5))
 		plt.title("%s Base Bias" % (self.inFile.split('/')[-1]))
 		plt.ylabel("% of Bases")
 		plt.subplots_adjust(left=0.05,right=0.91)
@@ -241,13 +242,15 @@ class fqFile:
 			IF = open(adapters,'r')
 			for record in SeqIO.parse(IF,'fasta'):
 				for i in range(20):
-					best = pairwise2.align.localms(top20[i][0],record.seq,2,-1,-2.0,-0.1)[0]
-					#bestC = pairwise2.align.localms(top20[i][0],record.seq.reverse_complement(),2,-1,-2,-0.1)[0]
-					if best[2] > 16:
-						aCounter[record.name]+=1
-			print("Adapter\t\tNum Hits")
-			for k,v in aCounter.iteritems():
-				print("%s\t%i"%(k,v))
+					results = pairwise2.align.localms(top20[i][0],str(record.seq),2,-1,-2.0,-0.1)
+					if results:
+						if results[0][2] > 16:
+							aCounter[record.name]+=1
+			print("%-30s %-10s %s" % ("Adapter","Num Hits","Sequence"))
+			rec_dict = SeqIO.index(adapters,'fasta')
+			for k,v in aCounter.most_common(10):
+				
+				print("%-30s %-10d %s"%(k,v,str(rec_dict[k].seq)))
 
 #	def plotBXP(self, printOut=True, verbose=False):
 #		"""
@@ -287,7 +290,6 @@ def bbWorker(inFile, maxLen, wid, procs, cconn):
 	"""
 	base bias worker called by plotBaseBias for parallel computation
 	"""
-	nt = ('A','G','C','T')
 	tmpBases = np.zeros((maxLen,4))
 	count = 0
 	myCount = 0
@@ -296,7 +298,7 @@ def bbWorker(inFile, maxLen, wid, procs, cconn):
 		if count % procs == wid:
 			npSeq = np.core.defchararray.asarray(seq, itemsize=1)
 			for i in xrange(4):
-				tmpBases[npSeq==nt[i],i] += 1
+				tmpBases[npSeq==bases[i],i] += 1
 			myCount += 1
 		count += 1
 	cpuTime = time.clock()-cpuStart
