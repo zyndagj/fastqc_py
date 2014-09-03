@@ -1,4 +1,5 @@
 import sys
+import os.path
 import numpy as np
 import matplotlib.pyplot as plt
 import time
@@ -177,7 +178,7 @@ class fqFile:
 		plt.subplots_adjust(left=0.05,right=0.91)
 		plt.show()
 
-	def calcKmers(self, k=5, nCores=1, plot=True, adapters=None, verbose=False):
+	def calcKmers(self, k=5, nCores=1, plot=True, adapt=True, verbose=False):
 		"""
 		Calculate and make a scatter plot of k-mers in reads.
 
@@ -186,6 +187,7 @@ class fqFile:
 		k	INT	k-mer size (Default: 5)
 		nCores	INT	cores to use (Default: 1)
 		plot	BOOL	plot the output (Default: True)
+		adapt	BOOL	align kmers against illumina adapters (Default:True)
 		verbose	BOOL	print the runtime (Default: False)
 		"""
 		kmerDict = Counter()
@@ -237,9 +239,10 @@ class fqFile:
 				plt.title("Top 20 K-mers in "+fName)
 				plt.tight_layout()
 				plt.show()
-		if adapters and adapters.split('.')[-1] in ('fasta','fa'):
+		aFile = os.path.join(os.path.dirname(__file__),'adapter_sequences.fa')
+		if adapt:
 			aCounter = Counter()
-			IF = open(adapters,'r')
+			IF = open(aFile,'r')
 			for record in SeqIO.parse(IF,'fasta'):
 				for i in range(20):
 					results = pairwise2.align.localms(top20[i][0],str(record.seq),2,-1,-2.0,-0.1)
@@ -247,7 +250,7 @@ class fqFile:
 						if results[0][2] > 16:
 							aCounter[record.name]+=1
 			print("%-30s %-10s %s" % ("Adapter","Num Hits","Sequence"))
-			rec_dict = SeqIO.index(adapters,'fasta')
+			rec_dict = SeqIO.index(aFile,'fasta')
 			for k,v in aCounter.most_common(10):
 				
 				print("%-30s %-10d %s"%(k,v,str(rec_dict[k].seq)))

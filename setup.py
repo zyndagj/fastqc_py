@@ -15,4 +15,5 @@ setup(name = "fastqc_py",
 	requires=[
 		'numpy',
 		'matplotlib'],
-	packages = ["fastqc_py"])
+	packages = ["fastqc_py"],
+	package_data={'fastqc_py':['adapter_sequences.fa']})
