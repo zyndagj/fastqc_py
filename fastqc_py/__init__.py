@@ -250,11 +250,11 @@ class fqFile:
 					if results:
 						if results[0][2] > 16:
 							aCounter[record.name]+=1
-			print("%-30s %-10s %s" % ("Adapter","Num Hits","Sequence"))
+			print("%-35s %-10s %s" % ("Adapter","Num Hits","Sequence"))
 			rec_dict = SeqIO.index(aFile,'fasta')
 			for k,v in aCounter.most_common(10):
 				
-				print("%-30s %-10d %s"%(k,v,str(rec_dict[k].seq)))
+				print("%-35s %-10d %s"%(k,v,str(rec_dict[k].seq)))
 
 #	def plotBXP(self, printOut=True, verbose=False):
 #		"""
@@ -332,6 +332,7 @@ def kmerWorker(inFile,k,wid,procs,cConn):
 	count = 0
 	for seq, qual in fileGen(inFile):
 		if count % procs == wid:
+			#tmp = [seq[i:i+k] for i in xrange(len(seq)-(k-1))]
 			tmp = [seq[i:i+k] for i in xrange(0,len(seq)-(k-1),3)]
 			for i in tmp:
 				if not 'N' in i:
