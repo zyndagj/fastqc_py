@@ -195,7 +195,7 @@ class fqFile:
 			wallStart = time.time()
 			cpuStart = time.clock()
 			for seq, qual in fileGen(self.inFile):
-				tmp = [seq[i:i+k] for i in xrange(len(seq)-(k-1))]
+				tmp = [seq[i:i+k] for i in xrange(0,len(seq)-(k-1),3)]
 				for i in tmp:
 					if not 'N' in i:
 						kmerDict[i]+= 1
@@ -215,9 +215,10 @@ class fqFile:
 				p[i].start()
 			cpuTotal = 0
 			for i in xrange(nCores):
-				tmpKmerDict, cpuTime = pConns[i].recv() # get results from processes
-				kmerDict += tmpKmerDict
+				kmerTop100, cpuTime = pConns[i].recv() # get results from processes
 				cpuTotal += cpuTime
+				for k,v in kmerTop100:
+					kmerDict[k]+=v
 			wallTime = time.time()-wallStart
 			for i in xrange(nCores):
 				p[i].join()
@@ -331,13 +332,13 @@ def kmerWorker(inFile,k,wid,procs,cConn):
 	count = 0
 	for seq, qual in fileGen(inFile):
 		if count % procs == wid:
-			tmp = [seq[i:i+k] for i in xrange(len(seq)-(k-1))]
+			tmp = [seq[i:i+k] for i in xrange(0,len(seq)-(k-1),3)]
 			for i in tmp:
 				if not 'N' in i:
 					kmerDict[i]+= 1
 		count += 1
 	cpuTime = time.clock()
-	cConn.send((kmerDict,cpuTime))
+	cConn.send((kmerDict.most_common(100),cpuTime))
 	cConn.close()
 
 def initMatrix(size):
