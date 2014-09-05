@@ -133,14 +133,14 @@ class fqFile:
 		"""
 		if not 'self.maxLen' in locals():
 			self.readLength(printOut=False)
-		bases = np.zeros((self.maxLen, 4))
+		bArray = np.zeros((self.maxLen, 4))
 		if nCores == 1:
 			count = 0
 			start = time.clock()
 			for seq,qual in fileGen(self.inFile):
 				npSeq = np.core.defchararray.asarray(seq, itemsize=1)
 				for i in xrange(4):
-					bases[npSeq==bases[i],i] += 1
+					bArray[npSeq==bases[i],i] += 1
 				count += 1
 				if not count % 100000: print "Finished %d of %d reads" % (count, self.numReads)
 			if verbose:
@@ -160,7 +160,7 @@ class fqFile:
 			cpuTotal = 0
 			for i in xrange(nCores):
 				tmpBases, cpuTime = pConns[i].recv() # get results from processes
-				bases += tmpBases
+				bArray += tmpBases
 				cpuTotal += cpuTime
 			wallTime = time.time()-wallStart
 			for i in xrange(nCores):
@@ -168,10 +168,10 @@ class fqFile:
 			if verbose:
 				print "CPU time: %.3f seconds" % (cpuTotal)
 				print "Walltime: %.3f seconds" % (wallTime)
-		sums = np.sum(bases,axis=1)
+		sums = np.sum(bArray,axis=1)
 		plt.figure(figsize=(12,4))
 		for i in range(4):
-			plt.plot(bases[:,i]/sums)
+			plt.plot(bArray[:,i]/sums)
 		plt.legend(bases,loc=5,bbox_to_anchor=(1.1,0.5))
 		plt.title("%s Base Bias" % (self.inFile.split('/')[-1]))
 		plt.ylabel("% of Bases")
