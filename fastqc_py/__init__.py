@@ -10,7 +10,7 @@ import matplotlib.cm as cm
 from Bio import pairwise2, SeqIO, Seq
 from cIO import cFileGen
 
-baseDict = {'A':'0','G':'1','C':'2','T':'3'}
+baseDict = {'A':0,'G':1,'C':2,'T':3,'N':4}
 bases = ('A','G','C','T','N')
 
 class fqFile:
@@ -133,7 +133,8 @@ class fqFile:
 		nCores	INT	Number of cpu cores to use. -1 to use all cores. (Default: 1)
 		verbose	BOOL	Print runtime (Default: False)
 		"""
-		if not 'self.maxLen' in locals():
+		if not 'maxLen' in self.__dict__.keys():
+			print "Running readLength"
 			self.readLength(printOut=False)
 		bArray = np.zeros((self.maxLen,5), dtype=np.uint32)
 		if nCores == 1:
@@ -171,10 +172,10 @@ class fqFile:
 			if verbose:
 				print "CPU time: %.3f seconds" % (cpuTotal)
 				print "Walltime: %.3f seconds" % (wallTime)
-		sums = np.sum(bArray,axis=1)
+		sums = np.array(np.sum(bArray,axis=1), dtype=np.float)
 		plt.figure(figsize=(12,4))
 		for i in range(5):
-			plt.plot(bArray[:,i]/np.array(sums,dtype=np.float))
+			plt.plot(bArray[:,i]/sums)
 		plt.legend(bases,loc=5,bbox_to_anchor=(1.1,0.5))
 		plt.title("%s Base Bias" % (self.inFile.split('/')[-1]))
 		plt.ylabel("% of Bases")
@@ -251,7 +252,7 @@ class fqFile:
 				for i in range(20):
 					results = pairwise2.align.localms(top20[i][0],str(record.seq),2,-1,-2.0,-0.1)
 					if results:
-						if results[0][2] > 16:
+						if results[0][2] > 2*k*0.75:
 							aCounter[record.name]+=1
 			print("%-35s %-10s %s" % ("Adapter","Num Hits","Sequence"))
 			rec_dict = SeqIO.index(aFile,'fasta')
@@ -299,15 +300,14 @@ def bbWorker(inFile, maxLen, wid, procs, cconn):
 	"""
 	tmpBases = np.zeros((maxLen,5), dtype=np.uint32)
 	count = 0
-	myCount = 0
 	cpuStart = time.clock()
 	#for seq, qual in fileGen(inFile):
 	for seq, qual in cFileGen(inFile):
 		if count % procs == wid:
-			npSeq = np.core.defchararray.asarray(seq, itemsize=1)
-			for i in xrange(5):
-				tmpBases[npSeq==bases[i],i] += 1
-			myCount += 1
+			tmpBases[range(len(seq)),map(lambda y: baseDict[y], seq)] += 1
+			#npSeq = np.core.defchararray.asarray(seq, itemsize=1)
+			#for i in xrange(5):
+			#	tmpBases[npSeq==bases[i],i] += 1
 		count += 1
 	cpuTime = time.clock()-cpuStart
 	cconn.send((tmpBases,cpuTime))

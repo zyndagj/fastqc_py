@@ -5,6 +5,7 @@
 typedef struct {
 	PyObject_HEAD
 	FILE* f;
+	//char *res;
 	int res;
 	char name1[100];
 	char seq[400];
@@ -14,7 +15,11 @@ typedef struct {
 
 PyObject* cFileGen_next(PyObject *self) {
 	cFileGenState *p = (cFileGenState *)self;
-	p->res = fscanf(p->f, "%s\n%s\n%s\n%s\n", p->name1, p->seq, p->name2, p->qual);
+	/*p->res = fgets(p->name1, 100, p->f);
+	p->res = fgets(p->seq, 400, p->f);
+	p->res = fgets(p->name2, 100, p->f);
+	p->res = fgets(p->qual, 400, p->f);*/
+	p->res = fscanf(p->f, "@%[^\n]\n%[^\n]\n%[^\n]\n%[^\n]\n", p->name1, p->seq, p->name2, p->qual);
 	if (p->res != EOF) {
 		PyObject *tmp = Py_BuildValue("(ss)", p->seq, p->qual);
 		return tmp;
