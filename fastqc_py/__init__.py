@@ -8,9 +8,10 @@ from array import array
 from collections import Counter
 import matplotlib.cm as cm
 from Bio import pairwise2, SeqIO, Seq
+from cIO import cFileGen
 
 baseDict = {'A':'0','G':'1','C':'2','T':'3'}
-bases = ('A','G','C','T')
+bases = ('A','G','C','T','N')
 
 class fqFile:
 	def __init__(self, inFile):
@@ -42,7 +43,8 @@ class fqFile:
 			return
 		lens = []
 		count = 0
-		for seq,qual in fileGen(self.inFile):
+		#for seq,qual in fileGen(self.inFile):
+		for seq,qual in cFileGen(self.inFile):
 			lens.append(len(seq))
 			count += 1
 		maxLen = max(lens)
@@ -133,13 +135,14 @@ class fqFile:
 		"""
 		if not 'self.maxLen' in locals():
 			self.readLength(printOut=False)
-		bArray = np.zeros((self.maxLen, 4))
+		bArray = np.zeros((self.maxLen,5), dtype=np.uint32)
 		if nCores == 1:
 			count = 0
 			start = time.clock()
-			for seq,qual in fileGen(self.inFile):
+			#for seq,qual in fileGen(self.inFile):
+			for seq,qual in cFileGen(self.inFile):
 				npSeq = np.core.defchararray.asarray(seq, itemsize=1)
-				for i in xrange(4):
+				for i in xrange(5):
 					bArray[npSeq==bases[i],i] += 1
 				count += 1
 				if not count % 100000: print "Finished %d of %d reads" % (count, self.numReads)
@@ -170,7 +173,7 @@ class fqFile:
 				print "Walltime: %.3f seconds" % (wallTime)
 		sums = np.sum(bArray,axis=1)
 		plt.figure(figsize=(12,4))
-		for i in range(4):
+		for i in range(5):
 			plt.plot(bArray[:,i]/sums)
 		plt.legend(bases,loc=5,bbox_to_anchor=(1.1,0.5))
 		plt.title("%s Base Bias" % (self.inFile.split('/')[-1]))
@@ -294,14 +297,15 @@ def bbWorker(inFile, maxLen, wid, procs, cconn):
 	"""
 	base bias worker called by plotBaseBias for parallel computation
 	"""
-	tmpBases = np.zeros((maxLen,4))
+	tmpBases = np.zeros((maxLen,5), dtype=np.uint32)
 	count = 0
 	myCount = 0
 	cpuStart = time.clock()
-	for seq, qual in fileGen(inFile):
+	#for seq, qual in fileGen(inFile):
+	for seq, qual in cFileGen(inFile):
 		if count % procs == wid:
 			npSeq = np.core.defchararray.asarray(seq, itemsize=1)
-			for i in xrange(4):
+			for i in xrange(5):
 				tmpBases[npSeq==bases[i],i] += 1
 			myCount += 1
 		count += 1
