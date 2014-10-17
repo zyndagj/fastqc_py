@@ -174,7 +174,7 @@ class fqFile:
 		sums = np.sum(bArray,axis=1)
 		plt.figure(figsize=(12,4))
 		for i in range(5):
-			plt.plot(bArray[:,i]/sums)
+			plt.plot(bArray[:,i]/np.array(sums,dtype=np.float))
 		plt.legend(bases,loc=5,bbox_to_anchor=(1.1,0.5))
 		plt.title("%s Base Bias" % (self.inFile.split('/')[-1]))
 		plt.ylabel("% of Bases")
