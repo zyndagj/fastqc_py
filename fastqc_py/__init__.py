@@ -7,6 +7,7 @@ from multiprocessing import Process, Pipe, cpu_count
 from array import array
 from collections import Counter
 import matplotlib.cm as cm
+from matplotlib.backends.backend_pdf import PdfPages
 from Bio import pairwise2, SeqIO, Seq
 from cIO import cFileGen
 
@@ -28,15 +29,16 @@ class fqFile:
 		else:
 			print "Bad file format: "+extension
 			print "Requires either an fq or fastq file"
-	def readLength(self, plot=False, printOut=True):
+	def readLength(self, plot=False, printOut=True, pp=""):
 		"""
 		Analyzes the fastq file for the sequence length
 
-		Parameters:
-		  plot     - produces a histogram plot of read lengths
-		             [True, False] Default:False
-		  printOut - prints statistics
-		             [True, False] Default:True
+		Parameters
+		=======================
+		plot		BOOL	Produces a histogram plot of read lengths.
+					(Default: False)
+		printOut	BOOL	Prints statistics. (Default: True)
+		pp		PdfPage	Only used by the runQC function.
 		"""
 		if not self.inFile:
 			print "Needs an input file"
@@ -59,11 +61,14 @@ class fqFile:
 			plt.title("Histogram of Read Lengths")
 			plt.ylabel("Counts")
 			plt.xlabel("Read Length")
-			plt.show()
+			if pp:
+				pp.savefig()
+			else:
+				plt.show()
 		self.maxLen = maxLen
 		self.numReads = count
 
-	def plotQual(self, printOut=True, nCores=1, verbose=False, plot=True):
+	def plotQual(self, printOut=True, nCores=1, verbose=False, plot=True, pp=""):
 		"""
 		View a boxplot of the qualities by base.
 
@@ -72,6 +77,7 @@ class fqFile:
 		printOut	BOOL	print quality format (Default: True)
 		nCores		INT	Number of cpu cores to use. -1 to use all cores. (Default: 1)
 		verbose		BOOL	Print the runtime (Default: False)
+		pp       	PdfPage	Only used by the runQC function.
 		"""
 		if not 'self.maxLen' in locals():
 			self.readLength(printOut=False)
@@ -79,7 +85,8 @@ class fqFile:
 		if nCores == 1:
 			cpuStart = time.clock()
 			wallStart = time.time()
-			for seq,qual in fileGen(self.inFile):
+			#for seq,qual in fileGen(self.inFile):
+			for seq,qual in cFileGen(self.inFile):
 				tmp = map(ord,qual)
 				for i in xrange(len(tmp)):
 					quals[i].append(tmp[i])
@@ -122,9 +129,12 @@ class fqFile:
 			plt.ylim(qualRange)
 			plt.tick_params(axis='x', which='both', labelbottom='off')
 			plt.tight_layout()
-			plt.show()
+			if pp:
+				pp.savefig()
+			else:
+				plt.show()
 
-	def plotBaseBias(self, nCores=1, verbose=False):
+	def plotBaseBias(self, nCores=1, verbose=False, pp=""):
 		"""
 		Plots the base bias, or per base sequence content.
 
@@ -132,6 +142,7 @@ class fqFile:
 		=============
 		nCores	INT	Number of cpu cores to use. -1 to use all cores. (Default: 1)
 		verbose	BOOL	Print runtime (Default: False)
+		pp     	PdfPage	Only used by the runQC function.
 		"""
 		if not 'maxLen' in self.__dict__.keys():
 			print "Running readLength"
@@ -142,9 +153,7 @@ class fqFile:
 			start = time.clock()
 			#for seq,qual in fileGen(self.inFile):
 			for seq,qual in cFileGen(self.inFile):
-				npSeq = np.core.defchararray.asarray(seq, itemsize=1)
-				for i in xrange(5):
-					bArray[npSeq==bases[i],i] += 1
+				tmpBases[range(len(seq)),map(lambda y: baseDict[y], seq)] += 1
 				count += 1
 				if not count % 100000: print "Finished %d of %d reads" % (count, self.numReads)
 			if verbose:
@@ -180,9 +189,12 @@ class fqFile:
 		plt.title("%s Base Bias" % (self.inFile.split('/')[-1]))
 		plt.ylabel("% of Bases")
 		plt.subplots_adjust(left=0.05,right=0.91)
-		plt.show()
+		if pp:
+			pp.savefig()
+		else:
+			plt.show()
 
-	def calcKmers(self, k=5, nCores=1, plot=True, adapt=True, verbose=False):
+	def calcKmers(self, k=5, nCores=1, plot=True, adapt=True, verbose=False, pp=""):
 		"""
 		Calculate and make a scatter plot of k-mers in reads.
 
@@ -193,12 +205,14 @@ class fqFile:
 		plot	BOOL	plot the output (Default: True)
 		adapt	BOOL	align kmers against illumina adapters (Default:True)
 		verbose	BOOL	print the runtime (Default: False)
+		pp	PdfPage	Only used by the runQC function.
 		"""
 		kmerDict = Counter()
 		if nCores == 1:
 			wallStart = time.time()
 			cpuStart = time.clock()
-			for seq, qual in fileGen(self.inFile):
+			#for seq, qual in fileGen(self.inFile):
+			for seq, qual in cFileGen(self.inFile):
 				tmp = [seq[i:i+k] for i in xrange(0,len(seq)-(k-1),3)]
 				for i in tmp:
 					if not 'N' in i:
@@ -243,7 +257,10 @@ class fqFile:
 				fName = self.inFile.split('/')[-1]
 				plt.title("Top 20 K-mers in "+fName)
 				plt.tight_layout()
-				plt.show()
+				if pp:
+					pp.savefig()
+				else:
+					plt.show()
 		aFile = os.path.join(os.path.dirname(__file__),'adapter_sequences.fa')
 		if adapt:
 			aCounter = Counter()
@@ -294,6 +311,49 @@ class fqFile:
 #		plt.tight_layout()
 #		plt.show()
 
+#def processMatrixBXP(qualMatrix):
+#	base, qual = np.where(qualMatrix > 0)
+#	minQual = min(qual)
+#	maxQual = max(qual)
+#	if maxQual > 74:
+#		qualRange = (64, 104)
+#	else:
+#		qualRange = (33, 74)
+#	boxDictList = map(lambda y: calcBox(y,qualRange),qualMatrix)
+#	return qualRange, boxDictList
+#
+#def calcBox(array, qualRange):
+#	numVals = sum(array)
+#	q1 = reducedPercentile(array, 25)
+#	q2 = reducedPercentile(array, 50)
+#	q3 = reducedPercentile(array, 75)
+#	IQR = q3-q1
+#	wLow = q1-1.5*IQR
+#	if wLow < qualRange[0]:
+#		wLow = qualRange[0]
+#	wHigh = q3+1.5*IQR
+#	if wHigh > qualRange[1]:
+#		wHigh = qualRange[1]
+#	return {'q1':q1, 'med':q2, 'q3':q3, 'whislo':wLow, 'whishi':wHigh}
+#
+#def reducedPercentile(array, percent):
+#	location = sum(array)*float(percent)/100.0
+#	accum = 0
+#	if location != int(location):
+#		for i in xrange(len(array)):
+#			accum += array[i]
+#			if accum > location:
+#				return i
+#	else:
+#		for i in xrange(len(array)):
+#			for k in xrange(array[i]):
+#				accum += 1
+#				if accum == location:
+#					first = i
+#				elif accum == location+1:
+#					second = i
+#					return (first+second)/2.0
+
 def bbWorker(inFile, maxLen, wid, procs, cconn):
 	"""
 	base bias worker called by plotBaseBias for parallel computation
@@ -305,9 +365,6 @@ def bbWorker(inFile, maxLen, wid, procs, cconn):
 	for seq, qual in cFileGen(inFile):
 		if count % procs == wid:
 			tmpBases[range(len(seq)),map(lambda y: baseDict[y], seq)] += 1
-			#npSeq = np.core.defchararray.asarray(seq, itemsize=1)
-			#for i in xrange(5):
-			#	tmpBases[npSeq==bases[i],i] += 1
 		count += 1
 	cpuTime = time.clock()-cpuStart
 	cconn.send((tmpBases,cpuTime))
@@ -320,7 +377,8 @@ def qualWorker(inFile, maxLen, wid, procs, cConn):
 	count = 0
 	quals = initMatrix(maxLen)
 	cpuStart = time.clock()
-	for seq,qual in fileGen(inFile):
+	#for seq,qual in fileGen(inFile):
+	for seq,qual in cFileGen(inFile):
 		if count % procs == wid:
 			tmp = map(ord,qual)
 			for i in xrange(len(tmp)):
@@ -334,7 +392,7 @@ def kmerWorker(inFile,k,wid,procs,cConn):
 	kmerDict = Counter()
 	cpuStart = time.clock()
 	count = 0
-	for seq, qual in fileGen(inFile):
+	for seq, qual in cFileGen(inFile):
 		if count % procs == wid:
 			#tmp = [seq[i:i+k] for i in xrange(len(seq)-(k-1))]
 			tmp = [seq[i:i+k] for i in xrange(0,len(seq)-(k-1),3)]
@@ -363,49 +421,6 @@ def fileGen(inFile):
 		yield((seq,qual))
 	IF.close()
 
-def processMatrixBXP(qualMatrix):
-	base, qual = np.where(qualMatrix > 0)
-	minQual = min(qual)
-	maxQual = max(qual)
-	if maxQual > 74:
-		qualRange = (64, 104)
-	else:
-		qualRange = (33, 74)
-	boxDictList = map(lambda y: calcBox(y,qualRange),qualMatrix)
-	return qualRange, boxDictList
-
-def calcBox(array, qualRange):
-	numVals = sum(array)
-	q1 = reducedPercentile(array, 25)
-	q2 = reducedPercentile(array, 50)
-	q3 = reducedPercentile(array, 75)
-	IQR = q3-q1
-	wLow = q1-1.5*IQR
-	if wLow < qualRange[0]:
-		wLow = qualRange[0]
-	wHigh = q3+1.5*IQR
-	if wHigh > qualRange[1]:
-		wHigh = qualRange[1]
-	return {'q1':q1, 'med':q2, 'q3':q3, 'whislo':wLow, 'whishi':wHigh}
-
-def reducedPercentile(array, percent):
-	location = sum(array)*float(percent)/100.0
-	accum = 0
-	if location != int(location):
-		for i in xrange(len(array)):
-			accum += array[i]
-			if accum > location:
-				return i
-	else:
-		for i in xrange(len(array)):
-			for k in xrange(array[i]):
-				accum += 1
-				if accum == location:
-					first = i
-				elif accum == location+1:
-					second = i
-					return (first+second)/2.0
-
 def calcQualRange(quals):
 	minQual = min(map(min, quals))
 	maxQual = max(map(max, quals))
@@ -425,3 +440,11 @@ def setCores(nCores, verbose):
 	if verbose:
 		print "Using %i cores" % (tmpCores)
 	return tmpCores
+
+def runQC(inFile,nCores=-1):
+	pp = PdfPages(os.path.splitext(inFile)[0]+'_qc.pdf')
+	fq = fqFile(inFile)
+	fq.readLength(plot=True, pp=pp)
+	fq.plotBaseBias(nCores=nCores, pp=pp)
+	fq.calcKmers(k=10, nCores=nCores, adapt=False, pp=pp)
+	pp.close()
