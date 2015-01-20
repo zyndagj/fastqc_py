@@ -3,7 +3,7 @@ import os.path
 import numpy as np
 import matplotlib.pyplot as plt
 import time
-from multiprocessing import Process, Pipe, cpu_count
+from multiprocessing import Process, Pipe, cpu_count, Pool
 from array import array
 from collections import Counter
 import matplotlib.cm as cm
@@ -45,7 +45,6 @@ class fqFile:
 			return
 		lens = []
 		count = 0
-		#for seq,qual in fileGen(self.inFile):
 		for seq,qual in cFileGen(self.inFile):
 			lens.append(len(seq))
 			count += 1
@@ -85,7 +84,6 @@ class fqFile:
 		if nCores == 1:
 			cpuStart = time.clock()
 			wallStart = time.time()
-			#for seq,qual in fileGen(self.inFile):
 			for seq,qual in cFileGen(self.inFile):
 				tmp = map(ord,qual)
 				for i in xrange(len(tmp)):
@@ -151,7 +149,6 @@ class fqFile:
 		if nCores == 1:
 			count = 0
 			start = time.clock()
-			#for seq,qual in fileGen(self.inFile):
 			for seq,qual in cFileGen(self.inFile):
 				tmpBases[range(len(seq)),map(lambda y: baseDict[y], seq)] += 1
 				count += 1
@@ -194,7 +191,7 @@ class fqFile:
 		else:
 			plt.show()
 
-	def calcKmers(self, k=5, nCores=1, plot=True, adapt=True, verbose=False, pp=""):
+	def calcKmers(self, k=6, nCores=1, plot=True, adapt=False, assemble=True, verbose=False, pp=""):
 		"""
 		Calculate and make a scatter plot of k-mers in reads.
 
@@ -211,7 +208,6 @@ class fqFile:
 		if nCores == 1:
 			wallStart = time.time()
 			cpuStart = time.clock()
-			#for seq, qual in fileGen(self.inFile):
 			for seq, qual in cFileGen(self.inFile):
 				tmp = [seq[i:i+k] for i in xrange(0,len(seq)-(k-1),3)]
 				for i in tmp:
@@ -235,8 +231,8 @@ class fqFile:
 			for i in xrange(nCores):
 				kmerTop100, cpuTime = pConns[i].recv() # get results from processes
 				cpuTotal += cpuTime
-				for k,v in kmerTop100:
-					kmerDict[k]+=v
+				for kmer,v in kmerTop100:
+					kmerDict[kmer]+=v
 			wallTime = time.time()-wallStart
 			for i in xrange(nCores):
 				p[i].join()
@@ -244,116 +240,89 @@ class fqFile:
 			print "CPU time: %.3f seconds" % (cpuTotal)
 			print "Walltime: %.3f seconds" % (wallTime)
 		top20 = kmerDict.most_common(20)
-		vals = map(lambda y: y[1], top20)
-		bottoms = np.cumsum([0]+vals[:-1])
 		if plot:
-				plt.figure(figsize=(4,8))
-				plt.axis('off')
-				plt.bar(np.zeros(20), vals, width=np.ones(20), color=cm.Set1(np.linspace(0,1,20)), bottom=bottoms)
-				plt.xlim((-0.05,1.6))
-				for i in xrange(20):
-					plt.text(1.1, bottoms[i]+vals[i]/2.0, top20[i][0], verticalalignment='center', family='monospace')
-					plt.text(0.5, bottoms[i]+vals[i]/2.0, str(vals[i]), va='center',ha='center')
-				fName = self.inFile.split('/')[-1]
-				plt.title("Top 20 K-mers in "+fName)
-				plt.tight_layout()
-				if pp:
-					pp.savefig()
-				else:
-					plt.show()
-		aFile = os.path.join(os.path.dirname(__file__),'adapter_sequences.fa')
+			vals = map(lambda y: y[1], top20)
+			bottoms = np.cumsum([0]+vals[:-1])
+			plt.figure(figsize=(4,8))
+			plt.axis('off')
+			plt.bar(np.zeros(20), vals, width=np.ones(20), color=cm.Set1(np.linspace(0,1,20)), bottom=bottoms)
+			plt.xlim((-0.05,1.6))
+			for i in xrange(20):
+				plt.text(1.1, bottoms[i]+vals[i]/2.0, top20[i][0], verticalalignment='center', family='monospace')
+				plt.text(0.5, bottoms[i]+vals[i]/2.0, str(vals[i]), va='center',ha='center')
+			fName = self.inFile.split('/')[-1]
+			plt.title("Top 20 K-mers in "+fName)
+			plt.tight_layout()
+			if pp:
+				pp.savefig()
+			else:
+				plt.show()
 		if adapt:
-			aCounter = Counter()
-			IF = open(aFile,'r')
-			for record in SeqIO.parse(IF,'fasta'):
-				for i in range(20):
-					results = pairwise2.align.localms(top20[i][0],str(record.seq),2,-1,-2.0,-0.1)
-					if results:
-						if results[0][2] > 2*k*0.75:
-							aCounter[record.name]+=1
-			print("%-35s %-10s %s" % ("Adapter","Num Hits","Sequence"))
-			rec_dict = SeqIO.index(aFile,'fasta')
-			for k,v in aCounter.most_common(10):
-				
-				print("%-35s %-10d %s"%(k,v,str(rec_dict[k].seq)))
+			print "\nAdapter Alignment to Kmers\n=============================="
+			adaptAlign(map(lambda y: y[0], top20), nCores)
+		if assemble:
+			newKmers = map(lambda y: y[0], kmerDict.most_common(25))
+			kmers = []
+			while len(kmers) != len(newKmers) or change:
+				change = False
+				kmers = newKmers
+				newKmers = []
+				kept = [False for i in range(len(kmers))]
+				for i in range(len(kmers)-1):
+					iLen = len(kmers[i])
+					for j in range(i+1,len(kmers)):
+						jLen = len(kmers[j])
+						minLen = min((iLen,jLen))
+						alignRes = pairwise2.align.localms(kmers[i],kmers[j], 2, -2, -2, -2)
+						if alignRes:
+							if alignRes[0][2] == (minLen-1)*2.0:
+								change = True
+								new = pileup(alignRes[0][0], alignRes[0][1])
+								newKmers.append(new)
+						if change:
+							kept[i] = True
+							kept[j] = True
+							break
+					if change: break
+				for i in range(len(kept)):
+					if not kept[i]: newKmers.append(kmers[i])
+			print "\nAssembled Kmers\n=============================="
+			for i in kmers: print i
+			print "\nAdapter Alignment to Assemblies\n=============================="
+			adaptAlign(kmers, nCores, thresh=0.9)
 
-#	def plotBXP(self, printOut=True, verbose=False):
-#		"""
-#		View a boxplot of the qualities by base.
-#
-#		Parameters
-#		=======================
-#		printOut	BOOL	 print quality format (Default: True)
-#		verbose		BOOL	Print the runtime (Default: False)
-#		"""
-#		if not 'self.maxLen' in locals():
-#			self.readLength(printOut=False)
-#		qualArray = np.zeros(self.maxLen*105, dtype=np.uint32)
-#		start = time.clock()
-#		for seq,qual in fileGen(self.inFile):
-#			tmp = map(ord,qual)
-#			qualArray[np.arange(len(tmp))*105+tmp] += 1
-#		if verbose:
-#			print "CPU time: %.3f seconds" % (time.clock()-start)
-#		qualMatrix = qualArray.reshape((self.maxLen,105))
-#		self.qualRange, boxList = processMatrixBXP(qualMatrix)
-#		print "Quality format: +%d" % (self.qualRange[0])
-#		plt.figure(figsize=(18,3))
-#		fig, ax = plt.subplots(111)
-#		ax[0].bxp(boxList)
-#		# switch to axes.bxp
-#		#plt.boxplot(quals, sym='')
-#		#plt.plot(range(1,len(quals)+1),map(np.mean, quals))
-#		plt.title("%s Quality Plot" % (self.inFile.split('/')[-1]))
-#		plt.ylabel("Quality Score")
-#		plt.ylim(qualRange)
-#		plt.tick_params(axis='x', which='both', labelbottom='off')
-#		plt.tight_layout()
-#		plt.show()
+def adaptAlign(kmers, nCores, thresh=0.8):
+	aFile = os.path.join(os.path.dirname(__file__),'adapter_sequences.fa')
+	aCounter = Counter()
+	alignPool = Pool(processes=nCores)
+	IF = open(aFile,'r')
+	numKmers = len(kmers)
+	for record in SeqIO.parse(IF,'fasta'):
+		args = zip(kmers,[str(record.seq)]*numKmers,[thresh]*numKmers)
+		RES = alignPool.map(alignWorker, args)
+		if sum(RES):
+			aCounter[record.name]+=sum(RES)
+	IF.close()
+	alignPool.close()
+	alignPool.join()
+	print("%-35s %-10s %s" % ("Adapter","Num Hits","Sequence"))
+	rec_dict = SeqIO.index(aFile,'fasta')
+	for kmer,v in aCounter.most_common(10):
+		print("%-35s %-10d %s"%(kmer,v,str(rec_dict[kmer].seq)))
 
-#def processMatrixBXP(qualMatrix):
-#	base, qual = np.where(qualMatrix > 0)
-#	minQual = min(qual)
-#	maxQual = max(qual)
-#	if maxQual > 74:
-#		qualRange = (64, 104)
-#	else:
-#		qualRange = (33, 74)
-#	boxDictList = map(lambda y: calcBox(y,qualRange),qualMatrix)
-#	return qualRange, boxDictList
-#
-#def calcBox(array, qualRange):
-#	numVals = sum(array)
-#	q1 = reducedPercentile(array, 25)
-#	q2 = reducedPercentile(array, 50)
-#	q3 = reducedPercentile(array, 75)
-#	IQR = q3-q1
-#	wLow = q1-1.5*IQR
-#	if wLow < qualRange[0]:
-#		wLow = qualRange[0]
-#	wHigh = q3+1.5*IQR
-#	if wHigh > qualRange[1]:
-#		wHigh = qualRange[1]
-#	return {'q1':q1, 'med':q2, 'q3':q3, 'whislo':wLow, 'whishi':wHigh}
-#
-#def reducedPercentile(array, percent):
-#	location = sum(array)*float(percent)/100.0
-#	accum = 0
-#	if location != int(location):
-#		for i in xrange(len(array)):
-#			accum += array[i]
-#			if accum > location:
-#				return i
-#	else:
-#		for i in xrange(len(array)):
-#			for k in xrange(array[i]):
-#				accum += 1
-#				if accum == location:
-#					first = i
-#				elif accum == location+1:
-#					second = i
-#					return (first+second)/2.0
+def pileup(s1,s2):
+	return ''.join(map(lambda x,y: y if x == '-' else x, s1,s2))
+	
+## Alignment Worker
+def alignWorker(args):
+	kmer, seq, thresh=args
+	minLen = min(map(len, args[:2]))
+	alignRes = pairwise2.align.localms(kmer, seq, 2, -2, -2, -2)
+	if alignRes:
+		if alignRes[0][2] >= (minLen*thresh)*2.0: return True
+	return False
 
+## Base Bias Worker
 def bbWorker(inFile, maxLen, wid, procs, cconn):
 	"""
 	base bias worker called by plotBaseBias for parallel computation
@@ -370,6 +339,7 @@ def bbWorker(inFile, maxLen, wid, procs, cconn):
 	cconn.send((tmpBases,cpuTime))
 	cconn.close()
 
+## Quality Worker
 def qualWorker(inFile, maxLen, wid, procs, cConn):
 	"""
 	Quality worker called by plotQuality
@@ -388,6 +358,7 @@ def qualWorker(inFile, maxLen, wid, procs, cConn):
 	cConn.send((quals, cpuTime))
 	cConn.close()
 
+## K-mer Worker
 def kmerWorker(inFile,k,wid,procs,cConn):
 	kmerDict = Counter()
 	cpuStart = time.clock()
